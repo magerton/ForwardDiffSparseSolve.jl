@@ -3,6 +3,13 @@ uuid = "45cea28e-a2c2-48b5-bf61-da5c0d9b8d5d"
 authors = ["Mark A SFF <mjagerton@ucdavis.edu> and contributors"]
 version = "0.1.0"
 
+[deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+
 [compat]
 julia = "1.6"
 
