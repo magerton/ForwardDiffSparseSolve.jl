@@ -1,0 +1,13 @@
+name = "ForwardDiffMatrixTools"
+uuid = "45cea28e-a2c2-48b5-bf61-da5c0d9b8d5d"
+authors = ["Mark A SFF <mjagerton@ucdavis.edu> and contributors"]
+version = "0.1.0"
+
+[compat]
+julia = "1.6"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
