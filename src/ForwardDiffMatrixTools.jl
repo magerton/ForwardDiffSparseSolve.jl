@@ -123,7 +123,6 @@ end
 
 
 
-
 """
     \\(M::FDFactor, y::AbstractVecor{<:AbstractFloat})
 
@@ -132,29 +131,33 @@ See `DualFactors` for details.
 
     M-1 = (I - ε A-1 B) A-1
 """
-function \(A::FDFactor{T}, b::AbstractVector{<:AbstractFloat}) where {T}
-    n = npartials(A)
+function \(
+    A::FDFactor{T,<:Factorization,<:AbstractMatrix{Partials{N,V}}},
+    b::AbstractVector{<:AbstractFloat}
+    ) where {T,N,V}
+    
     m = length(b)
     Ar = factor(A)
-    V = valtype(eltype(partials(A)))
-    N = npartials(A)
     
     Ar⁻¹y = Ar \ b  # outreal
     outreal = Ar⁻¹y
 
-    partialmat = Matrix{V}(undef, m, n)
+    partialmat = Matrix{V}(undef, m, N)
     tmp = Vector{V}(undef, m)
-    for j in 1:n
+    outvec = Vector{Dual{T,V,N}}(undef, m)
+
+
+    for j in 1:N
         Apj = partials(A,j)
         mul!(tmp, Apj, Ar⁻¹y, -1, false)
         partialj = view(partialmat, :,j)
         ldiv!(partialj, Ar, tmp)
     end
 
-    outvec = Vector{Dual{T,V,N}}(undef, m)
     for j in eachindex(outvec)
         val = outreal[j]
-        part = Partials(tuple(partialmat[j,:]...))
+        tup = NTuple{N,V}(partialmat[j,:]...)
+        part = Partials(tup...)
         outvec[j] = Dual{T,V,N}(val, part)
     end
     return outvec

@@ -48,8 +48,10 @@ const FDMT = ForwardDiffMatrixTools
     FD.npartials(eltype(partials(Msp)))
 
     b = rand(2)
+    luSF \ b
     @test luSF \ b ≈ Mdense\ b
     
+    FDMT.jnk(luSF)
 
 
 
