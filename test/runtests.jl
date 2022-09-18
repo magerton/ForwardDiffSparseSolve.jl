@@ -47,10 +47,21 @@ const FDMT = ForwardDiffMatrixTools
 
     FD.npartials(eltype(partials(Msp)))
 
+    SparseArrays.nonzeros(Msp)
+
     b = rand(2)
     luSF \ b
     @test luSF \ b ≈ Mdense\ b
     
+    tmp = FDMT.FDFactorTmp(Msp)
+    Y = Vector{eltype(Msp)}(undef, size(Msp, 1))
+
+    @test FDMT.myldiv!(Y, tmp, luSF, b) == luSF\b
+    @btime FDMT.myldiv!(Y, tmp, luSF, b)
+    @btime luSF\b
+
+    @code_warntype FDMT.myldiv!(Y, tmp, luSF, b)
+
     FDMT.jnk(luSF)
 
 

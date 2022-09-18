@@ -26,6 +26,7 @@ for f in (:partials, :value,)
     end
 end
 
+
 "return SparseMatrixCSC of jth partials (∂M/∂xⱼ)"
 function partials(M::SparseMatrixCSC{<:Dual,<:Int},j)
     m,n = size(M)
@@ -123,6 +124,83 @@ end
 # https://stackoverflow.com/questions/68543737/convert-a-tuple-vector-into-a-matrix-in-julia
 
 
+struct FDFactorTmp{V,Ti}
+    partials_in::SparseMatrixCSC{V,Ti}
+    partials_out::Matrix{V}
+    tmp_real::Vector{V}
+    
+    function FDFactorTmp(partials_in::SparseMatrixCSC{V,Ti}, partials_out, tmp_real) where {V,Ti}
+        m,n = size(partials_in)
+        length(tmp_real) == m || throw(DimensionMismatch("tmp_real must be of length $m"))
+        size(partials_out, 1) == m || throw(DimensionMismatch("partials_out must have $m rows"))
+        return new{V,Ti}(partials_in, partials_out, tmp_real)
+    end
+end
+
+Ar⁻¹y(x::FDFactorTmp) = x.tmp_real
+
+function FDFactorTmp(M::SparseMatrixCSC{<:Dual{T,V,N}}) where {T,V,N}
+    m,n = size(M)
+    colptr = getcolptr(M)
+    rows = rowvals(M)
+    
+    partials_in_values = Vector{V}(undef, nnz(M))
+    partials_in  = SparseMatrixCSC(m, n, colptr, rows, partials_in_values)
+    
+    partials_out = Matrix{V}(undef, m, N)
+    tmp_real     = Vector{V}(undef, m)
+
+    return FDFactorTmp(partials_in, partials_out, tmp_real)
+end
+
+function fill_partials!(x::FDFactorTmp, M::FDFactor, j)
+    nzM = nonzeros(partials(M))
+    nzx = nonzeros(x.partials_in)
+    length(nzM) == length(nzx) || throw(DimensionMismatch("partials_in and partials(M) must have the same number of nonzeros"))
+    
+    @inbounds @simd for i in eachindex(nzM, nzx)
+        nzx[i] = getindex(nzM[i], j)
+    end
+end
+
+
+"""
+    myldiv!(Y, A::FDFactor, b::AbstractVecor{<:AbstractFloat})
+"""
+function myldiv!(Y::AbstractVector, tmp::FDFactorTmp{V}, A::FDFactor, b::AbstractVector{<:AbstractFloat}) where {V}
+    m = LinearAlgebra.checksquare(factor(A))
+    m == length(b) || throw(DimensionMismatch())
+    m == length(Y) || throw(DimensionMismatch())
+    
+    # type signatures
+    N = npartials(A)
+    T = tagtype(A)
+    
+    Af = factor(A)
+    tmp_real = Ar⁻¹y(tmp)
+    ldiv!(tmp_real, Af, b)  # real part
+
+    partialmat = tmp.partials_out
+    Apj = tmp.partials_in
+
+    for j in 1:N
+        fill_partials!(tmp, A, j)
+        tmp_part = view(partialmat, :, j)
+        mul!(tmp_part, Apj, tmp_real, -1, false)
+        ldiv!(Af, tmp_part)
+    end
+
+    for i in eachindex(Y)
+        val = tmp_real[i]
+        tup = NTuple{N,V}(view(partialmat, i, :))
+        part = Partials(tup)
+        Y[i] = Dual{T,V,N}(val, part)
+    end
+    return Y
+end
+
+# import LinearAlgebra.ldiv!
+
 
 """
     \\(M::FDFactor, y::AbstractVecor{<:AbstractFloat})
@@ -132,22 +210,21 @@ See `DualFactors` for details.
 
     M-1 = (I - ε A-1 B) A-1
 """
-function \(
-    A::FDFactor{T,F,<:AbstractMatrix{Partials{N,V}}},
-    b::AbstractVector{<:AbstractFloat}
-    ) where {T,F,N,V}
+function \(A::FDFactor, b::AbstractVector{<:AbstractFloat})
     
-
-    # N = npartials(A)
-    # V = valtype(eltype(partials(A)))
+    # type signatures
+    T = tagtype(A)
+    N = npartials(A)    
+    V = valtype(eltype(partials(A)))
+    
     m = length(b)
-    Ar = factor(A)
     
-    Ar⁻¹y = Ar \ b  # outreal
+    Ar = factor(A)
+    Ar⁻¹y = Ar \ b  # real part
 
     partialmat = Matrix{V}(undef, m, N)
-    tmp = Vector{V}(undef, m)
-    outvec = Vector{Dual{T,V,N}}(undef, m)
+    tmp        = Vector{V}(undef, m)
+    outvec     = Vector{Dual{T,V,N}}(undef, m)
 
 
     for j in 1:N
@@ -159,12 +236,15 @@ function \(
 
     for j in eachindex(outvec)
         val = Ar⁻¹y[j]
-        tup = NTuple{N,V}(partialmat[j,:])
+        tup = NTuple{N,V}(view(partialmat, j,:))
         part = Partials(tup)
         outvec[j] = Dual{T,V,N}(val, part)
     end
     return outvec
 end
+
+
+
 
 # """
 #     \\(M::DualFactors, y::AbstractVecOrMat{Dual128})
