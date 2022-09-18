@@ -76,7 +76,8 @@ end
 
 import ForwardDiff: tagtype, npartials, valtype
 tagtype(::FDFactor{T}) where {T} = T
-npartials(x::FDFactor) = npartials(eltype(partials(x)))
+npartials(::FDFactor{T,F,<:AbstractMatrix{Partials{N,V}}}) where {T,F,N,V} = N
+valtype(::FDFactor{T,F,<:AbstractMatrix{Partials{N,V}}}) where {T,F,N,V} = V
 
 
 
@@ -132,15 +133,17 @@ See `DualFactors` for details.
     M-1 = (I - ε A-1 B) A-1
 """
 function \(
-    A::FDFactor{T,<:Factorization,<:AbstractMatrix{Partials{N,V}}},
+    A::FDFactor{T,F,<:AbstractMatrix{Partials{N,V}}},
     b::AbstractVector{<:AbstractFloat}
-    ) where {T,N,V}
+    ) where {T,F,N,V}
     
+
+    # N = npartials(A)
+    # V = valtype(eltype(partials(A)))
     m = length(b)
     Ar = factor(A)
     
     Ar⁻¹y = Ar \ b  # outreal
-    outreal = Ar⁻¹y
 
     partialmat = Matrix{V}(undef, m, N)
     tmp = Vector{V}(undef, m)
@@ -155,9 +158,9 @@ function \(
     end
 
     for j in eachindex(outvec)
-        val = outreal[j]
-        tup = NTuple{N,V}(partialmat[j,:]...)
-        part = Partials(tup...)
+        val = Ar⁻¹y[j]
+        tup = NTuple{N,V}(partialmat[j,:])
+        part = Partials(tup)
         outvec[j] = Dual{T,V,N}(val, part)
     end
     return outvec
