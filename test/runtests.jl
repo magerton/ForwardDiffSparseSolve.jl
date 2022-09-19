@@ -1,9 +1,7 @@
 # using Revise
 using ForwardDiffSparseSolve
 using Test
-# using ForwardDiff
-using LinearAlgebra, SparseArrays
-# using BenchmarkTools
+using LinearAlgebra, SparseArrays, ForwardDiff
 
 using ForwardDiff: Dual
 
@@ -41,9 +39,19 @@ const fdmt = ForwardDiffSparseSolve
 
     AA = [Dual(rand(3)...) for i in 1:2, j in 1:2]
     bb = [Dual(rand(3)...) for i in 1:2]
+    AAsp = sparse(AA)
+    AAreal = ForwardDiff.value.(AA)
+    bbreal=  ForwardDiff.value.(bb)
+    tmp2 = fdmt.DualldivTmp(AAsp, bb)
+    Y2 = similar(bb)
 
-    @test AA\bb ≈ \(sparse(AA), bb; replaceNaN=false)
-    @test AA\bb ≈ \(sparse(AA), bb; replaceNaN=true)
+    @test AA\bb ≈ \(AAsp, bb; replaceNaN=false)
+    @test AA\bb ≈ \(AAsp, bb; replaceNaN=true)
+    @test bb ≈ AAsp*\(AAsp, bb; replaceNaN=true)
+    @test bb ≈ AA*(AA\bb)
 
+    ldiv!(Y2, AAsp, bb, tmp2; replaceNaN=false, f=lu)
+    @test AA\bb ≈ Y2
 
 end
+
