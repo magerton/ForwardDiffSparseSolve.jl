@@ -5,71 +5,47 @@ using ForwardDiff
 using LinearAlgebra, SparseArrays
 using BenchmarkTools
 
-using ForwardDiff: value, partials, Dual, Partials, tagtype
+using ForwardDiff: value, partials, Dual, Partials, tagtype, GradientConfig, seed!
 using SparseArrays: getcolptr, rowvals
 
-const FD = ForwardDiff
-const FDMT = ForwardDiffMatrixTools
+const fdmt = ForwardDiffMatrixTools
 
 # @testset "ForwardDiffMatrixTools.jl" begin
 
     # generate dual 
     theta = [2.0,2.0]
     f(x) = sin(x)
-    cfg = FD.GradientConfig(f, theta)
+    cfg = GradientConfig(f, theta)
     tagtype(cfg)
     xdual = cfg.duals
-    FD.seed!(xdual, theta, cfg.seeds)
+    seed!(xdual, theta, cfg.seeds)
+
+    b = rand(2).*xdual
 
     # check dense M
-    Mpattern = [1 1; 0 1]
+    Mpattern = [1.0 1; 0 1] # rand(2,2)
     Mdense = Mpattern.*xdual
 
     # check sparse M
     Msp = sparse(Mpattern).*xdual
-    @test partials(Msp) == partials.(Msp)
-    @test rowvals(partials(Msp)) === rowvals(Msp)
-    @test getcolptr(partials(Msp)) === getcolptr(Msp)
+
+    @test Mdense\b == Msp\b
+    @test Msp*(Msp\b) ≈ b
 
     
-    luSF = lu(Msp)
-    lubase = lu(value(Msp))
+    Msp*(Msp\b)
 
-    FD.tagtype(luSF)
-    FD.valtype(luSF)
-    FD.npartials(luSF)
+    tmp = fdmt.DualldivTmp(Msp, b)
+    Y = similar(b)
+
+    ldiv!(Y, Msp, b, tmp; replaceNaN=false)
+    ldiv!(Y, Msp, b, tmp; replaceNaN=true)
+    Msp\b
+
+    Msp\b == ldiv!(Y, Msp, b, tmp)
     
-    v = Vector{Float64}(undef, length(nonzeros(Msp)))
-    @code_warntype FDMT.partials!(v, luSF, 1)
+    Mdense\b
 
-    @test factor(luSF).L == lubase.L
-    @test factor(luSF).U == lubase.U
-    @test factor(luSF).p == lubase.p
-
-    fill(first(xdual), 10)
-
-    FD.npartials(luSF)
-
-    FD.npartials(eltype(partials(Msp)))
-
-    SparseArrays.nonzeros(Msp)
-
-    b = rand(2)
-    luSF \ b
-    @test luSF \ b ≈ Mdense\ b
-    
-    tmp = FDMT.FDFactorTmp(Msp)
-    Y = Vector{eltype(Msp)}(undef, size(Msp, 1))
-
-    @test FDMT.myldiv!(Y, tmp, luSF, b) == luSF\b
-    @btime FDMT.myldiv!(Y, tmp, luSF, b)
-    @btime luSF\b
-
-    @code_warntype FDMT.myldiv!(Y, tmp, luSF, b)
-
-    FDMT.jnk(luSF)
-
-
-
+    @code_lowered fdmt.replaceNaN!(tmp.Yreal)
 
 # end
