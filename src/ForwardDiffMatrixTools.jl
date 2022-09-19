@@ -106,10 +106,10 @@ function ldiv!(Y::AbstractVector{D}, A::SparseMatrixCSC{D}, b::AbstractVector{D}
 end
 
 
-function \(A::SparseMatrixCSC{D}, b::AbstractVector{D}) where {D<:Dual}
+function \(A::SparseMatrixCSC{D}, b::AbstractVector{D}; replaceNaN=true) where {D<:Dual}
     Y = similar(b)
     tmp = DualldivTmp(A, b)
-    ldiv!(Y, A, b, tmp; f=factorize, replaceNaN=true)
+    ldiv!(Y, A, b, tmp; f=factorize, replaceNaN=replaceNaN)
     return Y
 end
 
