@@ -2,7 +2,7 @@ module ForwardDiffMatrixTools
 
 using ForwardDiff, LinearAlgebra, SparseArrays # , SuiteSparse
 
-using ForwardDiff: value, partials, Dual, Partials
+using ForwardDiff: value, partials, Dual, Partials, Tag
 using SparseArrays: getcolptr, rowvals
 
 import Base.\
@@ -27,16 +27,6 @@ for f in (:partials, :value,)
 end
 
 
-"return SparseMatrixCSC of jth partials (∂M/∂xⱼ)"
-function partials(M::SparseMatrixCSC{<:Dual,<:Int},j)
-    m,n = size(M)
-    colptr = getcolptr(M)
-    rows = rowvals(M)
-    v = partials.(nonzeros(M), j)
-    return SparseMatrixCSC(m, n, colptr, rows, v)
-end
-
-
 """
     FDFactor
 
@@ -52,36 +42,73 @@ a linear system of the type ``M x = b`` for a dual-valued matrix ``M = A + \\var
 In fact, the inverse of ``M`` is given by
 ``M^{-1} = (I - \\varepsilon A^{-1} B) A^{-1}``.
 """
-struct FDFactor{T, F<:Factorization, P<:AbstractMatrix}
+mutable struct FDFactor{M<:AM{<:Dual{<:Tag,V}}, F<:Union{Factorization,Nothing}} where {AM<:AbstractMatrix, V}
+    original::M   # original matrix
     factor::F # factors of the real part
-    partials::P  # partials(M)
+    partials_out::Matrix{V}
+    tmp_real::Vector{V}
+    partials::AM{}
+
 end
 export FDFactor
 
-function FDFactor(T, fac::F, part::P) where {F,P}
-    return FDFactor{T,F,P}(fac, part)
-end
 
-
-export factor
+# export factor, original
 factor(x::FDFactor) = x.factor
-partials(x::FDFactor) = x.partials
-
-function partials(x::FDFactor, j)
-    p = partials(x)
-    v = getindex.(nonzeros(p), j)
-    return SparseMatrixCSC(size(p)..., getcolptr(p), rowvals(p), v)
-end
-
-
+original(x::FDFactor) = x.original
 
 import ForwardDiff: tagtype, npartials, valtype
-tagtype(::FDFactor{T}) where {T} = T
-npartials(::FDFactor{T,F,<:AbstractMatrix{Partials{N,V}}}) where {T,F,N,V} = N
-valtype(::FDFactor{T,F,<:AbstractMatrix{Partials{N,V}}}) where {T,F,N,V} = V
+# export tagtype, npartials, valtype
+tagtype(  ::FDFactor{<:AbstractMatrix{<:Dual{T}}}) where {T} = T
+valtype(  ::FDFactor{<:AbstractMatrix{<:Dual{<:Tag,V}}}) where {V} = V
+npartials(::FDFactor{<:AbstractMatrix{<:Dual{<:Tag,<:Number,N}}}) where {N} = N
+
+"Fill `v` with the jth partial of `original(x)`."
+function partials!(v::Matrix, x::FDFactor{<:Matrix}, j)
+    eltype(v) == valtype(x) || throw(ArgumentError("v must have eltype $V"))
+    size(x) == size(v) || throw(DimensionMismatch("v length does not mach nonzeros(x)"))
+    1 <= j <= npartials(x) || throw(DomainError(j))
+    
+    nz = original(x)
+    @inbounds @simd for i in eachindex(nz, v)
+        v[i] = partials(nz[i], j)
+    end
+    return v
+end
+
+"Fill `v` with the jth partial of `original(x)`."
+function partials!(v::SparseMatrixCSC, x::FDFactor{<:SparseMatrixCSC}, j)
+    M = original(x)
+    
+    eltype(v) == valtype(x) || throw(ArgumentError("v must have eltype $V"))
+    nnz(v) == nnz(M)        || throw(DimensionMismatch("v length does not mach nonzeros(x)"))
+    size(v) == size(M)      || throw(DimensionMismatch("v not same size as x"))
+    1 <= j <= npartials(x)  || throw(DomainError(j))
+
+    nz = nonzeros(M)
+    vz = nonzeros(v)
+    @inbounds @simd for i in eachindex(nz, vz)
+        vz[i] = partials(nz[i], j)
+    end
+    return v
+end
+
+"Fill `v` with the jth partial of `original(x)`."
+function partials(x::FDFactor{<:SparseMatrixCSC}, j)
+    V = valtype(x)
+    M = original(x)
+    vz = Vector{V}(undef, nnz(M))
+    v = SparseMatrixCSC(size(M)..., getcolptr(M), rowvals(M), vz)
+    return partials!(v, x, j)
+end
 
 
-
+function partials(x::FDFactor{<:Matrix}, j)
+    V = valtype(x)
+    M = original(x)
+    v = Matrix{V}(undef, size(M))
+    return partials!(v, x, j)
+end
 
 
 
@@ -98,8 +125,8 @@ for f in (:lu, :qr, :cholesky, :factorize)
         Invokes `$($f)` on just the real part of `M` and stores 
         it along with the partials into a `FDSparseFactor` object.
         """
-        function $f(M::SparseMatrixCSC{<:Dual{T},<:Int}) where {T}
-            return FDFactor(T, $f(value(M)), partials(M))
+        function $f(M::SparseMatrixCSC{<:Dual})
+            return FDFactor(M, $f(value(M)))
         end
         
         
@@ -112,8 +139,8 @@ for f in (:lu, :qr, :cholesky, :factorize)
         Invokes `$($f)` on just the real part of `M` and stores 
         it along with the partials into a `FDSparseFactor` object.
         """
-        function $f(M::Matrix{<:Dual{T}})  where {T}
-            return FDFactor(T, $f(value.(M)), partials.(M))
+        function $f(M::Matrix{<:Dual})
+            return FDFactor(M, $f(value.(M)))
         end
         
         

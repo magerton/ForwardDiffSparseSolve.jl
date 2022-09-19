@@ -35,8 +35,13 @@ const FDMT = ForwardDiffMatrixTools
     luSF = lu(Msp)
     lubase = lu(value(Msp))
 
-    tagtype(luSF)
+    FD.tagtype(luSF)
+    FD.valtype(luSF)
+    FD.npartials(luSF)
     
+    v = Vector{Float64}(undef, length(nonzeros(Msp)))
+    @code_warntype FDMT.partials!(v, luSF, 1)
+
     @test factor(luSF).L == lubase.L
     @test factor(luSF).U == lubase.U
     @test factor(luSF).p == lubase.p
