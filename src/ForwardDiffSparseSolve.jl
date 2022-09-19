@@ -1,4 +1,4 @@
-module ForwardDiffMatrixTools
+module ForwardDiffSparseSolve
 
 using ForwardDiff, LinearAlgebra, SparseArrays
 
@@ -64,7 +64,12 @@ end
 
 
 """
-    ldiv!(Y, A::FDFactor, b::AbstractVecor{<:AbstractFloat})
+    ldiv!(Y, A::SparseMatrixCSC{<:Dual}, b::AbstractVector{<:Dual}, tmp::DualldivTmp; f=factorize, replaceNaN=true)
+
+Solve the linear system `A * Y = b` for `Y` using the factorization `f(A)`
+for a sparse, dual-valued `A`. 
+
+`tmp` is a `DualldivTmp` object that is used to store temporary data.
 """
 function ldiv!(Y::AbstractVector{D}, A::SparseMatrixCSC{D}, b::AbstractVector{D}, tmp::DualldivTmp; f::Function=factorize, replaceNaN=true) where {D<:Dual}
     n = LinearAlgebra.checksquare(A)

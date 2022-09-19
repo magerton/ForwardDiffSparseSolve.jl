@@ -1,5 +1,5 @@
 # using Revise
-using ForwardDiffMatrixTools
+using ForwardDiffSparseSolve
 using Test
 # using ForwardDiff
 using LinearAlgebra, SparseArrays
@@ -7,9 +7,9 @@ using LinearAlgebra, SparseArrays
 
 using ForwardDiff: Dual
 
-const fdmt = ForwardDiffMatrixTools
+const fdmt = ForwardDiffSparseSolve
 
-@testset "ForwardDiffMatrixTools.jl" begin
+@testset "ForwardDiffSparseSolve.jl" begin
 
     xdual = [Dual(1.0, 1.0, 0.0), Dual(2.0, 0.0, 1.0)]
     b = rand(2).*xdual
@@ -37,5 +37,13 @@ const fdmt = ForwardDiffMatrixTools
     
     ldiv!(Y, Msp, b, tmp; replaceNaN=true)
     @test Ydense == Y
+
+
+    AA = [Dual(rand(3)...) for i in 1:2, j in 1:2]
+    bb = [Dual(rand(3)...) for i in 1:2]
+
+    @test AA\bb ≈ \(sparse(AA), bb; replaceNaN=false)
+    @test AA\bb ≈ \(sparse(AA), bb; replaceNaN=true)
+
 
 end
