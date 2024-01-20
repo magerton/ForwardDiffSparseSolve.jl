@@ -84,14 +84,14 @@ function ldiv!(Y::AbstractVector{D}, A::SparseMatrixCSC{D}, b::AbstractVector{D}
     # Y = A⁻¹b = Ar \ br
     fillvalues!(nonzeros(tmp.A), nonzeros(A))
     fillvalues!(tmp.b, b)
-    Af = f(tmp.A)
+    Af = f(tmp.A) |> copy # if A is already triangular, then returns A... then A gets mutated and mutates Af too
     ldiv!(tmp.Yreal, Af, tmp.b)  # real part
 
     # ∂ⱼ = Ar \ (bpⱼ - Apⱼ*A⁻¹b )
     for j in 1:N
-        fillpartials!(nonzeros(tmp.A), nonzeros(A), j)
-        Ypj = view(tmp.Ypart, :, j)
-        fillpartials!(Ypj, b, j)
+        Ypj = view(tmp.Ypart, :, j)                    # ∂ⱼ
+        fillpartials!(Ypj, b, j)                       # ∂ⱼ = bpⱼ
+        fillpartials!(nonzeros(tmp.A), nonzeros(A), j) # Apⱼ
         mul!(Ypj, tmp.A, tmp.Yreal, -1, true)
         ldiv!(Af, Ypj)
         if replaceNaN

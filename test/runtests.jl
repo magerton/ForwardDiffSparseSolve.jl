@@ -6,6 +6,7 @@ using LinearAlgebra, SparseArrays, ForwardDiff
 using ForwardDiff: Dual
 
 const fdmt = ForwardDiffSparseSolve
+const FD = ForwardDiff
 
 @testset "ForwardDiffSparseSolve.jl" begin
 
@@ -55,3 +56,25 @@ const fdmt = ForwardDiffSparseSolve
 
 end
 
+@testset "check triangular matrix" begin
+    # requires copying over A factorization inside ldiv!
+    Aval_r = [
+        2.05  -1.0  1.05;
+        1.0    0.0  1.0;
+        1.0   -1.0  0.0;
+        0.0    0.0  0.0;
+        0.0    0.0  0.0
+    ]
+
+    K = 2
+    Aval = reinterpret(reshape, Dual{Nothing, Float64, 4}, Aval_r) |> copy
+    b    = reinterpret(reshape, Dual{Nothing, Float64, 4}, rand(5, 2)) |> copy
+    Acol = [1,2,4]
+    Arow = [1,1,2]
+    T = eltype(Aval)
+    A = SparseMatrixCSC{T,Int}(K, K, Acol, Arow, Aval)
+
+    @test A\b ≈ Matrix(A)\b
+    @test FD.partials.(A\b) ≈ FD.partials.(Matrix(A)\b)
+
+end
