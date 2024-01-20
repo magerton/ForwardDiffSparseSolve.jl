@@ -1,7 +1,7 @@
 name = "ForwardDiffSparseSolve"
 uuid = "45cea28e-a2c2-48b5-bf61-da5c0d9b8d5d"
 authors = ["Mark A SFF <mjagerton@ucdavis.edu> and contributors"]
-version = "0.1.0"
+version = "0.1.1"
 
 [deps]
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
